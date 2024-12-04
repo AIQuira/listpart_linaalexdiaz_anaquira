@@ -1,1 +1,2 @@
-# listpart_linaalexdiaz_anaquira
+# ListPart
+List partitions from a MBR/GPT disk

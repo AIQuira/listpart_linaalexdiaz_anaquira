@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <string.h> 
 
 #include "mbr.h"
 #include "gpt.h"
@@ -20,6 +21,7 @@
  * 
  */
 #define SECTOR_SIZE 512
+unsigned char buffer[SECTOR_SIZE];
 
 /**
  * @brief Hex dumps a buffer
@@ -57,8 +59,10 @@ int main(int argc, char *argv[])
 	char *disk;
 
 	// 1. Validar argumentos de línea de comandos
+	printf("Number of arguments: %d\n", argc);
 	if (argc < 2)
 	{
+		printf("Invalid number of arguments\n");
 		usage();
 		exit(EXIT_FAILURE);
 	}
@@ -68,6 +72,7 @@ int main(int argc, char *argv[])
 	mbr boot_record;
 	for (i = 1; i < argc; i++)
 	{		
+		printf("Processing disk: %s\n", argv[i]);
 		disk = argv[i];
 
 		// 2.1. Si la lectura falla, terminar.
@@ -82,17 +87,37 @@ int main(int argc, char *argv[])
 		hex_dump((char*)&boot_record, sizeof(mbr));
 
 		if (is_mbr(&boot_record)) {
-			printf("MBR detected\n");
+			printf("Disk initialized as MBR\n");
 			//4.Listar las particiones
+			char type_name[TYPE_NAME_LEN];
+			printf("MBR Partition Table\n");
+			printf("Start LBA       End LBA        Type\n");
+			printf("-----------------------------------------\n");
+			for(int i=0; i < 4; i++) {
+				if(boot_record.partition_table[i].type != 0){
+					mbr_partition_type(boot_record.partition_table[i].type, type_name);
+					printf("%10u %10u %20s\n",
+						boot_record.partition_table[i].start_lba,
+						boot_record.partition_table[i].start_lba + boot_record.partition_table[i].size_in_lba - 1,
+						type_name);
+				}
+			}
+			printf("-----------------------------------------\n");
 
 		} else if (is_protective_mbr(&boot_record)) {
-			printf("Protective MBR detected\n");
+			printf("Disk initialized as GPT\n");
 			gpt_header gpt_hdr;
-			if (read_lba_sector(disk, 0, (char*)&gpt_hdr) && is_valid_gpt_header(&gpt_hdr)) {
+			if (read_lba_sector(disk, 1, (char *)buffer)) {
+				memcpy(&gpt_hdr, buffer, sizeof(gpt_header));
+				if(is_valid_gpt_header(&gpt_hdr)) {
+					printf("GPT detected\n");
+					//5. Imprimir la tabla de particiones GPT
+					//5.1. El encabezado de la tabla de particiones GPT (se encuentra en el segundo sector en el disco) indica cuántos descritores están definidos.
+					//5.2. Leer los descriptores, que se encuentran en los siguientes sectores.
+				} else {
+					printf("Invalid GPT header\n");
+				}
 				printf("GPT detected\n");
-				//5. Imprimir la tabla de particiones GPT
-				//5.1. El encabezado de la tabla de particiones GPT (se encuentra en el segundo sector en el disco) indica cuántos descritores están definidos.
-				//5.2. Leer los descriptores, que se encuentran en los siguientes sectores.
 			} else {
 				printf("Invalid GPT header\n");
 			}

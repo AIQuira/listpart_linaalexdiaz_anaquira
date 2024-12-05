@@ -25,14 +25,32 @@ typedef struct {
 
 /** @brief GPT Partition Table Header. */
 typedef struct {
-	/* TODO definir los atributos del encabezado de la tabla GPT */
+	unsigned char signature[8]; /*!< GPT signature */
+	unsigned int revision; /*!< Revision of the GPT specification */
+	unsigned int header_size; /*!< Size of the GPT header in bytes */
+	unsigned int header_crc32; /*!< CRC32 of the GPT header */
+	unsigned int reserved; /*!< Reserved field */
+	unsigned long long current_lba; /*!< LBA of the header */
+	unsigned long long backup_lba; /*!< LBA of the alternate header */
+	unsigned long long first_usable_lba; /*!< First usable LBA for partitions */
+	unsigned long long last_usable_lba; /*!< Last usable LBA for partitions */
+	guid disk_guid; /*!< Disk GUID */
+	unsigned long long partition_entry_lba; /*!< LBA of the partition table */
+	unsigned int num_partition_entries; /*!< Number of partition entries */
+	unsigned int size_of_partition_entry; /*!< Size of a partition entry */
+	unsigned int partition_entry_array_crc32; /*!< CRC32 of the partition entry array */
 }__attribute__((packed)) gpt_header;
 
 /**
 * @brief GPT Partition Entry
 */
 typedef struct {
-	/* TODO definir los atributos de un descriptor de particion GPT */
+	guid partition_type_guid; /*!< Partition type GUID */
+	guid unique_partition_guid; /*!< Unique partition GUID */
+	unsigned long long starting_lba; /*!< Starting LBA of the partition */
+	unsigned long long ending_lba; /*!< Ending LBA of the partition */
+	unsigned long long attributes; /*!< Attribute flags*/
+	unsigned char partition_name[36]; /*!< Partition name */
 }__attribute__((packed)) gpt_partition_descriptor;
 
 /**

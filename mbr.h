@@ -23,7 +23,11 @@ typedef struct {
 	/* TODO definir los atributos para la estructura de un descriptor de particion MBR */
 	/* La suma completa de bytes de esta estructura debe ser 16 */
 	unsigned char boot_flag;
-	unsigned char reserved[15];
+	unsigned char chs_first[3];
+	unsigned char type;
+	unsigned char chs_last[3];
+	unsigned int start_lba;
+	unsigned int size_in_lba; //Number of sectors
 }__attribute__((packed)) mbr_partition_descriptor;
 
 /** @brief Master Boot Record. */

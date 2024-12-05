@@ -353,8 +353,9 @@ char * gpt_decode_partition_name(char name[72]) {
 
 
 int is_null_descriptor(gpt_partition_descriptor * desc) {
-
-	return 0;
+	guid NULL_GUID = {0};
+	return memcmp(&desc->partition_type_guid, &NULL_GUID, sizeof(guid)) == 0;
+	//return 0;
 }
 
 

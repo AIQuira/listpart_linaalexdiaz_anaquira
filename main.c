@@ -11,14 +11,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <string.h> 
+#include <string.h>
 
 #include "mbr.h"
 #include "gpt.h"
 
 /**
  * @brief Sector size defined in 512 bytes
- * 
+ *
  */
 #define SECTOR_SIZE 512
 unsigned char buffer[SECTOR_SIZE];
@@ -71,61 +71,110 @@ int main(int argc, char *argv[])
 
 	mbr boot_record;
 	for (i = 1; i < argc; i++)
-	{		
+	{
 		printf("Processing disk: %s\n", argv[i]);
 		disk = argv[i];
 
 		// 2.1. Si la lectura falla, terminar.
 		printf("Reading first sector disk: %s\n", disk);
-		if (read_lba_sector(disk, 0, (char*)&boot_record) == 0)
+		if (read_lba_sector(disk, 0, (char *)&boot_record) == 0)
 		{
 			fprintf(stderr, "Unable to open the device%s\n", disk);
 			exit(EXIT_FAILURE);
 		}
-		
-		printf("First sector read successfully. Hex dump:\n");
-		hex_dump((char*)&boot_record, sizeof(mbr));
 
-		if (is_mbr(&boot_record)) {
+		printf("First sector read successfully.\n");
+		// hex_dump((char*)&boot_record, sizeof(mbr));
+
+		if (is_mbr(&boot_record))
+		{
 			printf("Disk initialized as MBR\n");
-			//4.Listar las particiones
+			// 4.Listar las particiones
 			char type_name[TYPE_NAME_LEN];
 			printf("MBR Partition Table\n");
 			printf("Start LBA       End LBA        Type\n");
 			printf("-----------------------------------------\n");
-			for(int i=0; i < 4; i++) {
-				if(boot_record.partition_table[i].type != 0){
+			for (int i = 0; i < 4; i++)
+			{
+				if (boot_record.partition_table[i].type != 0)
+				{
 					mbr_partition_type(boot_record.partition_table[i].type, type_name);
 					printf("%10u %10u %20s\n",
-						boot_record.partition_table[i].start_lba,
-						boot_record.partition_table[i].start_lba + boot_record.partition_table[i].size_in_lba - 1,
-						type_name);
+						   boot_record.partition_table[i].start_lba,
+						   boot_record.partition_table[i].start_lba + boot_record.partition_table[i].size_in_lba - 1,
+						   type_name);
 				}
 			}
 			printf("-----------------------------------------\n");
-
-		} else if (is_protective_mbr(&boot_record)) {
+		}
+		else if (is_protective_mbr(&boot_record))
+		{
 			printf("Disk initialized as GPT\n");
 			gpt_header gpt_hdr;
-			if (read_lba_sector(disk, 1, (char *)buffer)) {
+
+			if (read_lba_sector(disk, 1, (char *)buffer))
+			{
 				memcpy(&gpt_hdr, buffer, sizeof(gpt_header));
-				if(is_valid_gpt_header(&gpt_hdr)) {
+
+				if (is_valid_gpt_header(&gpt_hdr))
+				{
 					printf("GPT detected\n");
-					//5. Imprimir la tabla de particiones GPT
-					//5.1. El encabezado de la tabla de particiones GPT (se encuentra en el segundo sector en el disco) indica cuántos descritores están definidos.
-					//5.2. Leer los descriptores, que se encuentran en los siguientes sectores.
-				} else {
+					// 5. Imprimir la tabla de particiones GPT
+					unsigned char sector_buffer[SECTOR_SIZE];
+					gpt_partition_descriptor descriptor;
+					unsigned int descriptors_per_sector = SECTOR_SIZE / gpt_hdr.size_of_partition_entry;
+					unsigned long long total_desc = gpt_hdr.num_partition_entries;
+					unsigned long long lba = gpt_hdr.partition_entry_lba;
+
+					printf("Start LBA       End LBA        Type\n");
+					printf("-----------------------------------------\n");
+
+					for (unsigned long long i = 0; i < total_desc; i++)
+					{
+						if (i % descriptors_per_sector == 0)
+						{
+							if (!read_lba_sector(disk, lba, (char *)sector_buffer))
+							{
+								printf("Error reading sector %llu\n", lba);
+								break;
+							}
+							lba++;
+						}
+
+						memcpy(&descriptor, &sector_buffer[(i % descriptors_per_sector) * gpt_hdr.size_of_partition_entry], gpt_hdr.size_of_partition_entry);
+
+						if (!is_null_descriptor(&descriptor))
+						{
+							char *guid_str = guid_to_str(&descriptor.partition_type_guid);
+
+							char *partition_name = gpt_decode_partition_name((char *)descriptor.partition_name);
+
+							printf("%10llu %10llu %20s %s\n",
+								   descriptor.starting_lba,
+								   descriptor.ending_lba,
+								   guid_str,
+								   partition_name ? partition_name : "(Unnamed)");
+						}
+					}
+					// 5.1. El encabezado de la tabla de particiones GPT (se encuentra en el segundo sector en el disco) indica cuántos descritores están definidos.
+					// 5.2. Leer los descriptores, que se encuentran en los siguientes sectores.
+				}
+				else
+				{
 					printf("Invalid GPT header\n");
 				}
 				printf("GPT detected\n");
-			} else {
+			}
+			else
+			{
 				printf("Invalid GPT header\n");
 			}
-		} else {
+		}
+		else
+		{
 			printf("Unknown partition table\n");
 		}
 	}
-	
 
 	//	- La lectura puede fallar por no tener acceso.
 	// 3. Verificar si es un MBR o un GPT
@@ -139,10 +188,9 @@ int main(int argc, char *argv[])
 	// 5.3. Imprimir la información de los descriptores leídos.
 	// En cada sector caben 4 descriptores. De acuerdo a los descriptores que dice la tabla, podemos definir la cantidad de sectore que se deben leer.
 
-
-// - Imprimirlas particiones de MBR
-// - Comprobar si es MBR o GPT (Asesoría)
-// - Im
+	// - Imprimirlas particiones de MBR
+	// - Comprobar si es MBR o GPT (Asesoría)
+	// - Im
 
 	return 0;
 }
@@ -162,16 +210,16 @@ int read_lba_sector(char *disk, unsigned long long lba, char buf[SECTOR_SIZE])
 		return 0;
 	}
 
-	//Move forward to the reading prompt
-	if(fseek(fd, lba*SECTOR_SIZE, SEEK_SET) != 0)
+	// Move forward to the reading prompt
+	if (fseek(fd, lba * SECTOR_SIZE, SEEK_SET) != 0)
 	{
 		perror("Error seeking disk");
 		fclose(fd);
 		return 0;
 	};
 
-	//Read disk sector
-	if(fread(buf, 1, SECTOR_SIZE, fd) != SECTOR_SIZE)
+	// Read disk sector
+	if (fread(buf, 1, SECTOR_SIZE, fd) != SECTOR_SIZE)
 	{
 		perror("Error reading disk");
 		return 0;
@@ -180,7 +228,7 @@ int read_lba_sector(char *disk, unsigned long long lba, char buf[SECTOR_SIZE])
 	fclose(fd);
 
 	return 1;
-	//return 0;
+	// return 0;
 }
 
 void ascii_dump(char *buf, size_t size)
@@ -215,4 +263,6 @@ void hex_dump(char *buf, size_t size)
 
 void usage()
 {
+	printf("Usage: \n");
+	printf("listpart disk : List disk partitions\n");
 }

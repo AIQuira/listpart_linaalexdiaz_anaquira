@@ -50,7 +50,7 @@ typedef struct {
 	unsigned long long starting_lba; /*!< Starting LBA of the partition */
 	unsigned long long ending_lba; /*!< Ending LBA of the partition */
 	unsigned long long attributes; /*!< Attribute flags*/
-	unsigned char partition_name[36]; /*!< Partition name */
+	unsigned char partition_name[72]; /*!< Partition name */
 }__attribute__((packed)) gpt_partition_descriptor;
 
 /**

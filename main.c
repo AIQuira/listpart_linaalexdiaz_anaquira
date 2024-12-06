@@ -53,13 +53,27 @@ int read_lba_sector(char *disk, unsigned long long lba, char buf[512]);
  */
 void usage();
 
+/**
+ * @brief Print MBR partition table
+ * 
+ * @param boot_record 
+ */
+void print_mbr_partitions(mbr *boot_record);
+
+/**
+ * @brief Print GPT partition table
+ * 
+ * @param gpt_hdr 
+ * @param disk 
+ */
+void print_gpt_partitions(gpt_header *gpt_hdr, char *disk);
+
 int main(int argc, char *argv[])
 {
 	int i;
 	char *disk;
 
 	// 1. Validar argumentos de línea de comandos
-	printf("Number of arguments: %d\n", argc);
 	if (argc < 2)
 	{
 		printf("Invalid number of arguments\n");
@@ -68,7 +82,6 @@ int main(int argc, char *argv[])
 	}
 
 	// 2. Leer el primer sector del disco
-
 	mbr boot_record;
 	for (i = 1; i < argc; i++)
 	{
@@ -83,12 +96,10 @@ int main(int argc, char *argv[])
 			exit(EXIT_FAILURE);
 		}
 
-		printf("First sector read successfully.\n");
-		hex_dump((char*)&boot_record, sizeof(mbr));
-
 		if (is_mbr(&boot_record)) {
 			if (is_protective_mbr(&boot_record)) {
 				printf("Disk initialized as GPT\n");
+				print_mbr_partitions(&boot_record);
 				gpt_header gpt_hdr;
 
 				printf("Reading GPT header sector\n");
@@ -97,58 +108,21 @@ int main(int argc, char *argv[])
 
 					printf("GPT Header Info: \n");
 					memcpy(&gpt_hdr, buffer, sizeof(gpt_header));
-					/*
-					printf("GPT Header Info: \n");
 					printf("  Signature: %.8s\n", gpt_hdr.signature);
-					printf("  Revision: 0x%x\n", gpt_hdr.revision);
 					printf("  Header Size: %u\n", gpt_hdr.header_size);
+					printf("  Revision: 0x%x\n", gpt_hdr.revision);
+					printf("  First usable LBA: %llu\n", gpt_hdr.first_usable_lba);
+					printf("  Last usable LBA: %llu\n", gpt_hdr.last_usable_lba);
+					printf("  Disk GUID: %s\n", guid_to_str(&gpt_hdr.disk_guid));
 					printf("  Partition Entry LBA: %llu\n", gpt_hdr.partition_entry_lba);
 					printf("  Number of Partition Entries: %u\n", gpt_hdr.num_partition_entries);
 					printf("  Size of Partition Entry: %u\n", gpt_hdr.size_of_partition_entry);
-					*/
+					printf("  Total of partition table entries sectors: %u\n", gpt_hdr.num_partition_entries * gpt_hdr.size_of_partition_entry / SECTOR_SIZE);
+					printf("  Size of a partition descriptor: %lu\n", sizeof(gpt_partition_descriptor));
 
 					if (is_valid_gpt_header(&gpt_hdr)) {
 						printf("GPT detected\n");
-
-						unsigned char sector_buffer[SECTOR_SIZE];
-						gpt_partition_descriptor descriptor;
-						unsigned int descriptors_per_sector = SECTOR_SIZE / gpt_hdr.size_of_partition_entry;
-						unsigned long long total_desc = gpt_hdr.num_partition_entries;
-						unsigned long long lba = gpt_hdr.partition_entry_lba;
-
-						printf("Start LBA       End LBA        Partition Type GUID                   Partition Name\n");
-						printf("--------------------------------------------------------------------------------------\n");
-
-						for (unsigned long long i = 0; i < total_desc; i++)
-						{
-							if (i % descriptors_per_sector == 0)
-							{
-								if (!read_lba_sector(disk, lba, (char *)sector_buffer))
-								{
-									fprintf(stderr, "Error reading sector %llu\n", lba);
-									break;
-								}
-								lba++;
-							}
-
-							memcpy(&descriptor, &sector_buffer[(i % descriptors_per_sector) * gpt_hdr.size_of_partition_entry], gpt_hdr.size_of_partition_entry);
-
-							if (!is_null_descriptor(&descriptor))
-							{
-								char *guid_str = guid_to_str(&descriptor.partition_type_guid);
-								char *partition_name = gpt_decode_partition_name((char *)descriptor.partition_name);
-
-								printf("%10llu %10llu %-37s %s\n",
-									   descriptor.starting_lba,
-									   descriptor.ending_lba,
-									   guid_str,
-									   partition_name ? partition_name : "(Unnamed)");
-
-								free(guid_str);
-							}
-						}
-
-						printf("--------------------------------------------------------------------------------------\n");
+						print_gpt_partitions(&gpt_hdr, disk);
 					} else {
 						printf("Invalid GPT header\n");
 					}
@@ -158,43 +132,12 @@ int main(int argc, char *argv[])
 			} else {
 				// 4.Listar las particiones
 				printf("Disk initialized as MBR\n");
-				char type_name[TYPE_NAME_LEN];
-				printf("MBR Partition Table\n");
-				printf("Start LBA       End LBA        Type\n");
-				printf("-----------------------------------------\n");
-				for (int i = 0; i < 4; i++)
-				{
-					if (boot_record.partition_table[i].type != 0)
-					{
-						mbr_partition_type(boot_record.partition_table[i].type, type_name);
-						printf("%10u %10u %20s\n",
-							boot_record.partition_table[i].start_lba,
-							boot_record.partition_table[i].start_lba + boot_record.partition_table[i].size_in_lba - 1,
-							type_name);
-					}
-				}
-				printf("-----------------------------------------\n");
+				print_mbr_partitions(&boot_record);
 			}
 		} else {
 			printf("Unknown partition table\n");
 		}
 	}
-
-	//	- La lectura puede fallar por no tener acceso.
-	// 3. Verificar si es un MBR o un GPT
-	//	- Tanto el MBR como el GTP son MBR. Esto conlleva a que se deba imprimir la tabla de particiones.
-	// 4. Listar las particiones
-	// 4.1 Si el esquema de particionado es MBR, imprimir la tabla de particiones y terminar el programa.
-	// PRE: El sistema de particionado es GPT
-	// 5. Imprimir la tabla de particiones GPT.
-	// 5.1. El encabezado de la tabla de particiones GPT (se encuentra en el segundo sector en el disco) indica cuántos descritores están definidos.
-	// 5.2. Leer los descriptores, que se encuentran en los siguientes sectores.
-	// 5.3. Imprimir la información de los descriptores leídos.
-	// En cada sector caben 4 descriptores. De acuerdo a los descriptores que dice la tabla, podemos definir la cantidad de sectore que se deben leer.
-
-	// - Imprimirlas particiones de MBR
-	// - Comprobar si es MBR o GPT (Asesoría)
-	// - Im
 
 	return 0;
 }
@@ -269,4 +212,65 @@ void usage()
 {
 	printf("Usage: \n");
 	printf("listpart disk : List disk partitions\n");
+}
+
+void print_mbr_partitions(mbr *boot_record){
+	char type_name[TYPE_NAME_LEN];
+	printf("MBR Partition Table\n");
+	printf("Start LBA    End LBA      Type\n");
+	printf("------------ ------------ -------------------------------------\n");
+	for (int i = 0; i < 4; i++)
+	{
+		if (boot_record->partition_table[i].type != 0)
+		{
+			mbr_partition_type(boot_record->partition_table[i].type, type_name);
+			printf("%12u %12u %20s\n",
+				boot_record->partition_table[i].start_lba,
+				boot_record->partition_table[i].start_lba + boot_record->partition_table[i].size_in_lba - 1,
+				type_name);
+		}
+	}
+	printf("------------ ------------ -------------------------------------\n");
+}
+
+void print_gpt_partitions(gpt_header *gpt_hdr, char *disk) {
+	unsigned char sector_buffer[SECTOR_SIZE];
+	gpt_partition_descriptor descriptor;
+	unsigned int descriptors_per_sector = SECTOR_SIZE / gpt_hdr->size_of_partition_entry;
+	unsigned long long total_desc = gpt_hdr->num_partition_entries;
+	unsigned long long lba = gpt_hdr->partition_entry_lba;
+
+	printf("Start LBA    End LBA      Size         Partition Type GUID                  Partition Name\n");
+	printf("------------ ------------ ------------ ------------------------------------ ------------------------------\n");
+
+	for (unsigned long long i = 0; i < total_desc; i++)
+	{
+		if (i % descriptors_per_sector == 0)
+		{
+			if (!read_lba_sector(disk, lba, (char *)sector_buffer))
+			{
+				fprintf(stderr, "Error reading sector %llu\n", lba);
+				break;
+			}
+			lba++;
+		}
+
+		memcpy(&descriptor, &sector_buffer[(i % descriptors_per_sector) * gpt_hdr->size_of_partition_entry], gpt_hdr->size_of_partition_entry);
+
+		if (!is_null_descriptor(&descriptor))
+		{
+			char *guid_str = guid_to_str(&descriptor.partition_type_guid);
+			char *partition_name = gpt_decode_partition_name((char *)descriptor.partition_name);
+
+			printf("%12llu %12llu %12llu %-37s %s\n",
+					descriptor.starting_lba,
+					descriptor.ending_lba,
+					descriptor.ending_lba - descriptor.starting_lba + 1,
+					guid_str,
+					partition_name ? partition_name : "(Unnamed)");
+
+			free(guid_str);
+		}
+	}
+	printf("------------ ------------ ------------ ------------------------------------ ------------------------------\n");
 }

@@ -88,7 +88,87 @@ int main(int argc, char *argv[])
 
 		if (is_mbr(&boot_record))
 		{
+
 			printf("Disk initialized as MBR\n");
+
+			if (is_protective_mbr(&boot_record))
+			{
+				printf("Disk initialized as GPT\n");
+				gpt_header gpt_hdr;
+
+				printf("Reading GPT header sector\n");
+				if (read_lba_sector(disk, 1, (char *)buffer))
+				{
+					printf("GPT header sector read successfully\n");
+
+					printf("GPT Header Info: \n");
+					memcpy(&gpt_hdr, buffer, sizeof(gpt_header));
+					/*
+					printf("GPT Header Info: \n");
+					printf("  Signature: %.8s\n", gpt_hdr.signature);
+					printf("  Revision: 0x%x\n", gpt_hdr.revision);
+					printf("  Header Size: %u\n", gpt_hdr.header_size);
+					printf("  Partition Entry LBA: %llu\n", gpt_hdr.partition_entry_lba);
+					printf("  Number of Partition Entries: %u\n", gpt_hdr.num_partition_entries);
+					printf("  Size of Partition Entry: %u\n", gpt_hdr.size_of_partition_entry);
+					*/
+
+					if (is_valid_gpt_header(&gpt_hdr))
+					{
+						printf("GPT detected\n");
+
+						unsigned char sector_buffer[SECTOR_SIZE];
+						gpt_partition_descriptor descriptor;
+						unsigned int descriptors_per_sector = SECTOR_SIZE / gpt_hdr.size_of_partition_entry;
+						unsigned long long total_desc = gpt_hdr.num_partition_entries;
+						unsigned long long lba = gpt_hdr.partition_entry_lba;
+
+						printf("Start LBA       End LBA        Partition Type GUID                   Partition Name\n");
+						printf("--------------------------------------------------------------------------------------\n");
+
+						for (unsigned long long i = 0; i < total_desc; i++)
+						{
+							if (i % descriptors_per_sector == 0)
+							{
+								if (!read_lba_sector(disk, lba, (char *)sector_buffer))
+								{
+									fprintf(stderr, "Error reading sector %llu\n", lba);
+									break;
+								}
+								lba++;
+							}
+
+							memcpy(&descriptor, &sector_buffer[(i % descriptors_per_sector) * gpt_hdr.size_of_partition_entry], gpt_hdr.size_of_partition_entry);
+
+							if (!is_null_descriptor(&descriptor))
+							{
+								char *guid_str = guid_to_str(&descriptor.partition_type_guid);
+								char *partition_name = gpt_decode_partition_name((char *)descriptor.partition_name);
+
+								printf("%10llu %10llu %-37s %s\n",
+									   descriptor.starting_lba,
+									   descriptor.ending_lba,
+									   guid_str,
+									   partition_name ? partition_name : "(Unnamed)");
+
+								free(guid_str);
+							}
+						}
+
+						printf("--------------------------------------------------------------------------------------\n");
+					}
+					else
+					{
+						printf("Invalid GPT header\n");
+					}
+				}
+			}
+
+			else
+			{
+				printf("Error reading GPT header sector\n");
+			}
+
 			// 4.Listar las particiones
 			char type_name[TYPE_NAME_LEN];
 			printf("MBR Partition Table\n");
@@ -106,73 +186,6 @@ int main(int argc, char *argv[])
 				}
 			}
 			printf("-----------------------------------------\n");
-		}
-		else if (is_protective_mbr(&boot_record))
-		{
-			printf("Disk initialized as GPT\n");
-			gpt_header gpt_hdr;
-
-			if (read_lba_sector(disk, 1, (char *)buffer))
-			{
-				memcpy(&gpt_hdr, buffer, sizeof(gpt_header));
-
-				if (is_valid_gpt_header(&gpt_hdr))
-				{
-					printf("GPT detected\n");
-					// 5. Imprimir la tabla de particiones GPT
-					unsigned char sector_buffer[SECTOR_SIZE];
-					gpt_partition_descriptor descriptor;
-					unsigned int descriptors_per_sector = SECTOR_SIZE / gpt_hdr.size_of_partition_entry;
-					unsigned long long total_desc = gpt_hdr.num_partition_entries;
-					unsigned long long lba = gpt_hdr.partition_entry_lba;
-
-					printf("Start LBA       End LBA        Type\n");
-					printf("-----------------------------------------\n");
-
-					for (unsigned long long i = 0; i < total_desc; i++)
-					{
-						if (i % descriptors_per_sector == 0)
-						{
-							if (!read_lba_sector(disk, lba, (char *)sector_buffer))
-							{
-								printf("Error reading sector %llu\n", lba);
-								break;
-							}
-							lba++;
-						}
-
-						memcpy(&descriptor, &sector_buffer[(i % descriptors_per_sector) * gpt_hdr.size_of_partition_entry], gpt_hdr.size_of_partition_entry);
-
-						if (!is_null_descriptor(&descriptor))
-						{
-							char *guid_str = guid_to_str(&descriptor.partition_type_guid);
-
-							char *partition_name = gpt_decode_partition_name((char *)descriptor.partition_name);
-
-							printf("%10llu %10llu %20s %s\n",
-								   descriptor.starting_lba,
-								   descriptor.ending_lba,
-								   guid_str,
-								   partition_name ? partition_name : "(Unnamed)");
-						}
-					}
-					// 5.1. El encabezado de la tabla de particiones GPT (se encuentra en el segundo sector en el disco) indica cuántos descritores están definidos.
-					// 5.2. Leer los descriptores, que se encuentran en los siguientes sectores.
-				}
-				else
-				{
-					printf("Invalid GPT header\n");
-				}
-				printf("GPT detected\n");
-			}
-			else
-			{
-				printf("Invalid GPT header\n");
-			}
-		}
-		else
-		{
-			printf("Unknown partition table\n");
 		}
 	}
 

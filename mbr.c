@@ -267,9 +267,13 @@ int is_mbr(mbr * boot_record) {
 
 
 void mbr_partition_type(unsigned char type, char buf[TYPE_NAME_LEN]) {
-	if (type < 256) {
-		strncpy(buf, mbr_partition_types[type], TYPE_NAME_LEN);
-	} else {
-		strncpy(buf, "Unknown", TYPE_NAME_LEN);
-	}
+    // Validación del índice
+    if (type < 256 && mbr_partition_types[type] != NULL) {
+        // Copiar con terminación asegurada
+        strncpy(buf, mbr_partition_types[type], TYPE_NAME_LEN - 1);
+        buf[TYPE_NAME_LEN - 1] = '\0'; // Forzar terminación nula
+    } else {
+        strncpy(buf, "Unknown", TYPE_NAME_LEN - 1);
+        buf[TYPE_NAME_LEN - 1] = '\0'; // Forzar terminación nula
+    }
 }

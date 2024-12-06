@@ -286,19 +286,36 @@ const gpt_partition_type gpt_partition_types[] = {
 };
 
 
-int is_protective_mbr(mbr * boot_record) {
-	/* TODO verificar si el MBR es un MBR de proteccion */
-	/* Retorna 1 si el boot record tiene una tabla de particiones
-	con solo una partición definida, de tipo GPT Protective MBR (0xEE) */
-	return 0;
+int is_protective_mbr(mbr *boot_record) {
+    // Verificar si la última entrada de la tabla de particiones es un MBR protector (0xEE)
+    return boot_record->partition_table[3].type == MBR_TYPE_GPT; // MBR_TYPE_GPT es 0xEE
 }
 
 
-int is_valid_gpt_header(gpt_header * hdr) {
-	// Implementar la validación del encabezado GPT
-	// Por ejemplo, verificar la firma "EFI PART"
-	return strncmp((char*)hdr, "EFI PART", 8) == 0;
+
+int is_valid_gpt_header(gpt_header *hdr) {
+    // Verificar la firma "EFI PART"
+    if (strncmp((char*)hdr->signature, "EFI PART", 8) != 0) {
+        return 0; // No es un encabezado GPT válido
+    }
+
+    // Validar otros parámetros esenciales
+    if (hdr->size_of_partition_entry != 128) { // GPT usa entradas de 128 bytes
+        return 0; // Tamaño de la entrada de partición no es el esperado
+    }
+
+    if (hdr->num_partition_entries == 0) {
+        return 0; // No hay entradas de partición definidas
+    }
+
+    // Verificar la dirección del encabezado de la tabla de particiones
+    if (hdr->partition_entry_lba == 0) {
+        return 0; // La dirección de la tabla de particiones no es válida
+    }
+
+    return 1; // Encabezado GPT válido
 }
+
 
 
 char * guid_to_str(guid * buf) {
@@ -352,25 +369,23 @@ char * gpt_decode_partition_name(char name[72]) {
 }
 
 
-int is_null_descriptor(gpt_partition_descriptor * desc) {
-	guid NULL_GUID = {0};
-	return memcmp(&desc->partition_type_guid, &NULL_GUID, sizeof(guid)) == 0;
-	//return 0;
+int is_null_descriptor(gpt_partition_descriptor *desc) {
+    guid NULL_GUID = {0}; // Un GUID con todos sus bytes en cero
+    return memcmp(&desc->partition_type_guid, &NULL_GUID, sizeof(guid)) == 0;
 }
 
 
 
-const gpt_partition_type * get_gpt_partition_type(char * guid_str) {
 
-	for (size_t i = 0; i < sizeof(gpt_partition_types) / sizeof(gpt_partition_types[0]); i++) {
-		if (strcmp(gpt_partition_types[i].guid, guid_str) == 0) {
-			return &gpt_partition_types[i];
-		}
-	}
+const gpt_partition_type * get_gpt_partition_type(char *guid_str) {
+    for (size_t i = 0; i < sizeof(gpt_partition_types) / sizeof(gpt_partition_types[0]); i++) {
+        if (strcmp(gpt_partition_types[i].guid, guid_str) == 0) {
+            return &gpt_partition_types[i];
+        }
+    }
 
-	//Default: return first element of partition type array
-	//return &gpt_partition_types[0];
-	return NULL;
+    // Si no se encuentra el GUID, devolvemos NULL
+    return NULL;
 }
 
 

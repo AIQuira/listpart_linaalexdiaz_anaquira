@@ -288,7 +288,24 @@ const gpt_partition_type gpt_partition_types[] = {
 
 int is_protective_mbr(mbr *boot_record) {
     // Verificar si la última entrada de la tabla de particiones es un MBR protector (0xEE)
-    return boot_record->partition_table[3].type == MBR_TYPE_GPT; // MBR_TYPE_GPT es 0xEE
+    // return boot_record->partition_table[3].type == MBR_TYPE_GPT; // MBR_TYPE_GPT es 0xEE
+	if(!is_mbr(boot_record)) {
+		return 0;
+	}
+	for (int i = 0; i < 4; i++) {
+		mbr_partition_descriptor *part = &boot_record->partition_table[i];
+        printf("Partition %d:\n", i);
+        printf("  Boot flag: 0x%02x\n", part->boot_flag);
+        printf("  CHS first: %02x%02x%02x\n", part->chs_first[0], part->chs_first[1], part->chs_first[2]);
+        printf("  Type: 0x%02x\n", part->type);
+        printf("  CHS last: %02x%02x%02x\n", part->chs_last[0], part->chs_last[1], part->chs_last[2]);
+        printf("  Start LBA: %u\n", part->start_lba);
+        printf("  Size in LBA: %u\n", part->size_in_lba);
+        if (part->type == MBR_TYPE_GPT) {
+            return 1;
+        }
+	}
+	return 0;
 }
 
 

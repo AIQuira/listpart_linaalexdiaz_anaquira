@@ -84,21 +84,15 @@ int main(int argc, char *argv[])
 		}
 
 		printf("First sector read successfully.\n");
-		// hex_dump((char*)&boot_record, sizeof(mbr));
+		hex_dump((char*)&boot_record, sizeof(mbr));
 
-		if (is_mbr(&boot_record))
-		{
-
-			printf("Disk initialized as MBR\n");
-
-			if (is_protective_mbr(&boot_record))
-			{
+		if (is_mbr(&boot_record)) {
+			if (is_protective_mbr(&boot_record)) {
 				printf("Disk initialized as GPT\n");
 				gpt_header gpt_hdr;
 
 				printf("Reading GPT header sector\n");
-				if (read_lba_sector(disk, 1, (char *)buffer))
-				{
+				if (read_lba_sector(disk, 1, (char *)buffer)) {
 					printf("GPT header sector read successfully\n");
 
 					printf("GPT Header Info: \n");
@@ -113,8 +107,7 @@ int main(int argc, char *argv[])
 					printf("  Size of Partition Entry: %u\n", gpt_hdr.size_of_partition_entry);
 					*/
 
-					if (is_valid_gpt_header(&gpt_hdr))
-					{
+					if (is_valid_gpt_header(&gpt_hdr)) {
 						printf("GPT detected\n");
 
 						unsigned char sector_buffer[SECTOR_SIZE];
@@ -156,36 +149,34 @@ int main(int argc, char *argv[])
 						}
 
 						printf("--------------------------------------------------------------------------------------\n");
-					}
-					else
-					{
+					} else {
 						printf("Invalid GPT header\n");
 					}
+				} else {
+					printf("Error reading GPT header sector\n");
 				}
-			}
-
-			else
-			{
-				printf("Error reading GPT header sector\n");
-			}
-
-			// 4.Listar las particiones
-			char type_name[TYPE_NAME_LEN];
-			printf("MBR Partition Table\n");
-			printf("Start LBA       End LBA        Type\n");
-			printf("-----------------------------------------\n");
-			for (int i = 0; i < 4; i++)
-			{
-				if (boot_record.partition_table[i].type != 0)
+			} else {
+				// 4.Listar las particiones
+				printf("Disk initialized as MBR\n");
+				char type_name[TYPE_NAME_LEN];
+				printf("MBR Partition Table\n");
+				printf("Start LBA       End LBA        Type\n");
+				printf("-----------------------------------------\n");
+				for (int i = 0; i < 4; i++)
 				{
-					mbr_partition_type(boot_record.partition_table[i].type, type_name);
-					printf("%10u %10u %20s\n",
-						   boot_record.partition_table[i].start_lba,
-						   boot_record.partition_table[i].start_lba + boot_record.partition_table[i].size_in_lba - 1,
-						   type_name);
+					if (boot_record.partition_table[i].type != 0)
+					{
+						mbr_partition_type(boot_record.partition_table[i].type, type_name);
+						printf("%10u %10u %20s\n",
+							boot_record.partition_table[i].start_lba,
+							boot_record.partition_table[i].start_lba + boot_record.partition_table[i].size_in_lba - 1,
+							type_name);
+					}
 				}
+				printf("-----------------------------------------\n");
 			}
-			printf("-----------------------------------------\n");
+		} else {
+			printf("Unknown partition table\n");
 		}
 	}
 
